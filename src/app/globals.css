@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #0a0a0f;
+  --color-foreground: #f0f0f0;
+  --color-neon-cyan: #00fff5;
+  --color-neon-purple: #bf00ff;
+  --color-neon-green: #39ff14;
+  --color-neon-orange: #ff6b35;
+  --color-dark-bg: #0a0a0f;
+  --color-dark-surface: #12121a;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: #0a0a0f;
+  color: #f0f0f0;
+  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #ffffff20;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ffffff40;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-bounce {
+  animation: bounce 0.8s ease-in-out infinite;
+}
+
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3 {
+  color: #00fff5;
+}
+
+.prose-invert a {
+  color: #bf00ff;
+}
+
+.prose-invert ul li::marker {
+  color: #00fff5;
+}
