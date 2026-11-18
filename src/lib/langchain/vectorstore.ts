@@ -1,13 +1,7 @@
 import { Document } from '@langchain/core/documents'
-import { Embeddings } from '@langchain/core/embeddings'
 import type { PersonaId } from '@/types/chat'
 import path from 'path'
 import fs from 'fs'
-
-interface SimpleVectorEntry {
-  vector: number[]
-  doc: Document
-}
 
 // Map each persona to the knowledge-base file it should retrieve from
 const PERSONA_SOURCE: Record<PersonaId, string> = {
@@ -21,72 +15,80 @@ const PERSONA_SOURCE: Record<PersonaId, string> = {
   legal: 'legal-guide.md',
 }
 
-class SimpleVectorStore {
-  private entries: SimpleVectorEntry[] = []
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'is', 'are', 'was', 'were', 'be',
+  'it', 'this', 'that', 'with', 'as', 'at', 'by', 'from', 'how', 'what', 'do', 'does', 'i', 'you',
+  'my', 'me', 'can', 'should', 'would', 'about',
+])
 
-  constructor(private embeddings: SimpleEmbeddings) {}
+export function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 1 && !STOP_WORDS.has(t))
+}
 
-  async addDocuments(docs: Document[]): Promise<void> {
-    const vectors = await this.embeddings.embedDocuments(docs.map((d) => d.pageContent))
-    for (let i = 0; i < docs.length; i++) {
-      this.entries.push({ vector: vectors[i], doc: docs[i] })
+interface Entry {
+  doc: Document
+  terms: Map<string, number>
+  length: number
+}
+
+/**
+ * Small in-memory BM25 index. Retrieval is lexical (not semantic) but honest: results
+ * actually share words with the query, unlike the previous character-code "embeddings".
+ */
+export class KeywordIndex {
+  private entries: Entry[] = []
+  private docFreq = new Map<string, number>()
+  private avgLength = 0
+
+  addDocuments(docs: Document[]): void {
+    for (const doc of docs) {
+      const tokens = tokenize(doc.pageContent)
+      const terms = new Map<string, number>()
+      for (const t of tokens) terms.set(t, (terms.get(t) ?? 0) + 1)
+      for (const t of terms.keys()) this.docFreq.set(t, (this.docFreq.get(t) ?? 0) + 1)
+      this.entries.push({ doc, terms, length: tokens.length })
     }
+    this.avgLength =
+      this.entries.reduce((sum, e) => sum + e.length, 0) / Math.max(this.entries.length, 1)
   }
 
-  async similaritySearch(query: string, k = 3, sourceFile?: string): Promise<Document[]> {
-    if (this.entries.length === 0) return []
+  similaritySearch(query: string, k = 3, sourceFile?: string): Document[] {
+    const queryTerms = tokenize(query)
+    if (queryTerms.length === 0) return []
     const pool = sourceFile
       ? this.entries.filter((e) => e.doc.metadata.source === sourceFile)
       : this.entries
-    if (pool.length === 0) return []
+    const n = this.entries.length
+    const k1 = 1.5
+    const b = 0.75
 
-    const queryVec = await this.embeddings.embedQuery(query)
-    const scored = pool.map((e) => ({
-      score: cosineSim(queryVec, e.vector),
-      doc: e.doc,
-    }))
-    scored.sort((a, b) => b.score - a.score)
-    return scored.slice(0, k).map((s) => s.doc)
-  }
-}
-
-function cosineSim(a: number[], b: number[]): number {
-  let dot = 0, magA = 0, magB = 0
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i]
-    magA += a[i] * a[i]
-    magB += b[i] * b[i]
-  }
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB) || 1)
-}
-
-class SimpleEmbeddings extends Embeddings {
-  constructor() { super({}) }
-
-  async embedDocuments(texts: string[]): Promise<number[][]> {
-    return texts.map((t) => this.textToVector(t))
-  }
-
-  async embedQuery(text: string): Promise<number[]> {
-    return this.textToVector(text)
-  }
-
-  private textToVector(text: string): number[] {
-    const vec = new Array(128).fill(0)
-    const lower = text.toLowerCase()
-    for (let i = 0; i < lower.length; i++) {
-      vec[i % 128] += lower.charCodeAt(i) / 1000
-    }
-    const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1
-    return vec.map((v) => v / mag)
+    return pool
+      .map((e) => {
+        let score = 0
+        for (const t of queryTerms) {
+          const tf = e.terms.get(t)
+          if (!tf) continue
+          const df = this.docFreq.get(t) ?? 0
+          const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5))
+          score += (idf * (tf * (k1 + 1))) / (tf + k1 * (1 - b + (b * e.length) / (this.avgLength || 1)))
+        }
+        return { score, doc: e.doc }
+      })
+      .filter((r) => r.score > 0)
+      .sort((a, b2) => b2.score - a.score)
+      .slice(0, k)
+      .map((r) => r.doc)
   }
 }
 
 declare global {
-  var __vectorStore: SimpleVectorStore | undefined
+  var __keywordIndex: KeywordIndex | undefined
 }
 
-function chunkText(text: string, size = 500, overlap = 50): string[] {
+export function chunkText(text: string, size = 500, overlap = 50): string[] {
   const chunks: string[] = []
   let start = 0
   while (start < text.length) {
@@ -113,14 +115,12 @@ function loadKnowledgeBase(): Document[] {
   return docs
 }
 
-export async function getVectorStore(): Promise<SimpleVectorStore> {
-  if (global.__vectorStore) return global.__vectorStore
-  const embeddings = new SimpleEmbeddings()
-  const store = new SimpleVectorStore(embeddings)
-  const docs = loadKnowledgeBase()
-  if (docs.length > 0) await store.addDocuments(docs)
-  global.__vectorStore = store
-  return global.__vectorStore
+export async function getVectorStore(): Promise<KeywordIndex> {
+  if (global.__keywordIndex) return global.__keywordIndex
+  const index = new KeywordIndex()
+  index.addDocuments(loadKnowledgeBase())
+  global.__keywordIndex = index
+  return index
 }
 
 export { PERSONA_SOURCE }

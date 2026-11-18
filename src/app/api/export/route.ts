@@ -3,7 +3,8 @@ import type { Message } from '@/types/chat'
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, format } = await req.json() as { messages: Message[]; format: 'json' | 'txt' }
+    const { messages: rawMessages, format } = await req.json() as { messages: Message[]; format: 'json' | 'txt' }
+    const messages = (Array.isArray(rawMessages) ? rawMessages : []).slice(-500)
 
     if (format === 'json') {
       const content = JSON.stringify(messages, null, 2)

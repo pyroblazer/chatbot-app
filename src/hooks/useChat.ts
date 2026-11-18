@@ -28,6 +28,11 @@ export function useChat() {
       if (!activeConv) return
 
       const { sessionId, persona } = activeConv
+      // Stateless server: send the recent turns so memory survives serverless cold starts
+      const history = activeConv.messages
+        .filter((m) => !m.isStreaming && m.content)
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.content }))
 
       const userMsg: Message = {
         id: makeId(),
@@ -53,7 +58,7 @@ export function useChat() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: input, sessionId, persona }),
+          body: JSON.stringify({ message: input, sessionId, persona, history }),
           signal: abortRef.current.signal,
         })
 
