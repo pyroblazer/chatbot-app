@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, KeyboardEvent, useCallback } from 'react'
-import { Send, Square } from 'lucide-react'
+import { Send, Square, Mic } from 'lucide-react'
+import { useSpeechInput } from '@/hooks/useSpeechInput'
 
 interface Props {
   onSend: (message: string) => void
@@ -57,6 +58,7 @@ export default function InputBar({ onSend, onCancel, isStreaming, fillText, onFi
   }
 
   const remaining = MAX_CHARS - value.length
+  const speech = useSpeechInput(useCallback((t: string) => setValue((v) => (v ? `${v} ${t}` : t).slice(0, MAX_CHARS)), []))
 
   return (
     <div className="border-t border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md p-4">
@@ -82,6 +84,17 @@ export default function InputBar({ onSend, onCancel, isStreaming, fillText, onFi
           </span>
         </div>
 
+        {speech.supported && !isStreaming && (
+          <button
+            type="button"
+            onClick={speech.listening ? speech.stop : speech.start}
+            aria-label={speech.listening ? 'Stop voice input' : 'Start voice input'}
+            aria-pressed={speech.listening}
+            className={`flex-shrink-0 w-12 h-12 rounded-xl border flex items-center justify-center transition-colors ${speech.listening ? 'bg-red-900/50 border-red-500/50 text-red-300' : 'bg-[#12121a] border-white/20 text-gray-300 hover:text-white'}`}
+          >
+            <Mic size={18} />
+          </button>
+        )}
         {isStreaming ? (
           <button
             onClick={onCancel}

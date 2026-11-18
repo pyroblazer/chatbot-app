@@ -44,6 +44,8 @@ interface ChatStore {
   appendChunk: (chunk: string) => void
   finalizeMessage: (content: string, nlp?: NLPResult) => void
   setStreaming: (v: boolean) => void
+  /** Remove the message with this id and everything after it (used by edit / regenerate). */
+  truncateFrom: (messageId: string) => void
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -148,6 +150,19 @@ export const useChatStore = create<ChatStore>()(
 
       setStreaming(isStreaming) {
         set({ isStreaming })
+      },
+
+      truncateFrom(messageId) {
+        const { activeId } = get()
+        if (!activeId) return
+        set((s) => ({
+          conversations: s.conversations.map((c) => {
+            if (c.id !== activeId) return c
+            const idx = c.messages.findIndex((m) => m.id === messageId)
+            if (idx < 0) return c
+            return { ...c, messages: c.messages.slice(0, idx), updatedAt: now() }
+          }),
+        }))
       },
     }),
     {

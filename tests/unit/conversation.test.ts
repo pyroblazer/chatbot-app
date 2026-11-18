@@ -132,3 +132,23 @@ describe('chatStore - multi-conversation', () => {
     expect(selectActiveConversation(getStore())).toBeNull()
   })
 })
+
+describe('chatStore - truncateFrom', () => {
+  test('removes the given message and everything after it', () => {
+    const id = getStore().createConversation()
+    const mk = (n: string, role: 'user' | 'assistant') => ({ id: n, role, content: n, timestamp: '' })
+    getStore().addMessage(mk('m1', 'user'))
+    getStore().addMessage(mk('m2', 'assistant'))
+    getStore().addMessage(mk('m3', 'user'))
+    getStore().truncateFrom('m2')
+    const conv = getStore().conversations.find((c) => c.id === id)!
+    expect(conv.messages.map((m) => m.id)).toEqual(['m1'])
+  })
+
+  test('ignores unknown ids', () => {
+    getStore().createConversation()
+    getStore().addMessage({ id: 'x', role: 'user', content: 'x', timestamp: '' })
+    getStore().truncateFrom('nope')
+    expect(selectActiveConversation(getStore())!.messages).toHaveLength(1)
+  })
+})

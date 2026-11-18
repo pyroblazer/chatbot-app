@@ -14,9 +14,12 @@ const EXAMPLE_PROMPTS = [
 interface Props {
   messages: Message[]
   onPromptClick: (text: string) => void
+  onRegenerate?: () => void
+  onEdit?: (messageId: string, newText: string) => void
+  isStreaming?: boolean
 }
 
-export default function ChatWindow({ messages, onPromptClick }: Props) {
+export default function ChatWindow({ messages, onPromptClick, onRegenerate, onEdit, isStreaming = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,9 +51,22 @@ export default function ChatWindow({ messages, onPromptClick }: Props) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1" role="log" aria-label="Chat messages">
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
+    <div
+      className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+      role="log"
+      aria-label="Chat messages"
+      aria-live="polite"
+      aria-busy={isStreaming}
+    >
+      {messages.map((msg, i) => (
+        <MessageBubble
+          key={msg.id}
+          message={msg}
+          isLast={i === messages.length - 1}
+          disabled={isStreaming}
+          onRegenerate={onRegenerate}
+          onEdit={onEdit}
+        />
       ))}
       <div ref={bottomRef} />
     </div>

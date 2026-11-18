@@ -8,6 +8,7 @@ import Sidebar from '@/components/sidebar/Sidebar'
 import { useChat } from '@/hooks/useChat'
 import { useRecommendations } from '@/hooks/useRecommendations'
 import { useChatStore, selectActiveConversation } from '@/stores/chatStore'
+import { conversationUsage } from '@/lib/usage'
 
 const BackgroundScene = dynamic(() => import('@/components/three/BackgroundScene'), { ssr: false })
 
@@ -22,8 +23,9 @@ export default function ChatUI() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { messages, isStreaming, sendMessage, cancel } = useChat()
+  const { messages, isStreaming, sendMessage, cancel, regenerate, editMessage } = useChat()
   const { recommendations, loading: loadingRecs, fetchRecommendations } = useRecommendations()
+  const usage = conversationUsage(messages)
   const [fillText, setFillText] = useState<string | undefined>(undefined)
 
   useEffect(() => {
@@ -47,8 +49,17 @@ export default function ChatUI() {
             <>
               <div className="flex items-center px-4 py-3 border-b border-white/10 bg-[#0a0a0f]/50 backdrop-blur-sm shrink-0">
                 <span className="text-sm font-medium text-gray-300 truncate">{activeConv.title}</span>
+                <span className="ml-auto pl-3 text-xs text-gray-500 shrink-0" title="Estimated, not billed usage">
+                  {usage.messages} msgs · ~{usage.tokens} tokens
+                </span>
               </div>
-              <ChatWindow messages={messages} onPromptClick={setFillText} />
+              <ChatWindow
+                messages={messages}
+                onPromptClick={setFillText}
+                onRegenerate={regenerate}
+                onEdit={editMessage}
+                isStreaming={isStreaming}
+              />
               <InputBar
                 onSend={sendMessage}
                 onCancel={cancel}

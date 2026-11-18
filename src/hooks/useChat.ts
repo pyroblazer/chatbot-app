@@ -114,5 +114,28 @@ export function useChat() {
     abortRef.current?.abort()
   }, [])
 
-  return { messages, isStreaming, sendMessage, cancel }
+  /** Re-run the last user turn: drop the last assistant answer and ask again. */
+  const regenerate = useCallback(() => {
+    const state = useChatStore.getState()
+    if (state.isStreaming) return
+    const conv = selectActiveConversation(state)
+    if (!conv) return
+    const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
+    if (!lastUser) return
+    state.truncateFrom(lastUser.id)
+    void sendMessage(lastUser.content)
+  }, [sendMessage])
+
+  /** Replace a user message with new text and regenerate everything after it. */
+  const editMessage = useCallback(
+    (messageId: string, newText: string) => {
+      const state = useChatStore.getState()
+      if (state.isStreaming) return
+      state.truncateFrom(messageId)
+      void sendMessage(newText)
+    },
+    [sendMessage]
+  )
+
+  return { messages, isStreaming, sendMessage, cancel, regenerate, editMessage }
 }
